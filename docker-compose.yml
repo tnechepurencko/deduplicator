@@ -1,0 +1,11 @@
+version: "3.7"
+services:
+  postgresql_db:
+    image: "postgres:15-alpine3.17"
+    restart: always
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: deduplicator
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1308249756
