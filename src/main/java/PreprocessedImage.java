@@ -1,35 +1,32 @@
-// Java program to demonstrate colored
-// to red colored image conversion
-
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import javax.imageio.ImageIO;
-
 import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.imgcodecs.Imgcodecs;
-import org.opencv.imgproc.Imgproc;
 
-
-public class PreprocessedImage {
-    public static File preprocessedImage(String filename, String initialFolder, String finalFolder, String extension, int whiteRatio) {
-//        tuneContrast(filename, initialFolder, finalFolder);
-        reduceNoise(filename, initialFolder, finalFolder, extension, whiteRatio);
-        return new File(finalFolder + filename);
+public class PreprocessedImage extends Image {
+    public PreprocessedImage(String filename, String initialFolder, String finalFolder, String extension) {
+        super(filename, initialFolder, finalFolder, extension);
+    }
+    public File preprocessImage(int whiteRatio) {
+//        this.tuneContrast(2);
+        this.reduceNoise(whiteRatio);
+        return new File(this.finalFolder + this.filename);
     }
 
-    private static void tuneContrast(String filename, String initialFolder, String finalFolder) {
+    private void tuneContrast(int alpha) {
         System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
-        Mat src = Imgcodecs.imread(initialFolder + filename, Imgcodecs.IMREAD_COLOR);
+        Mat src = Imgcodecs.imread(this.initialFolder + this.filename, Imgcodecs.IMREAD_COLOR);
         Mat dest = new Mat(src.rows(), src.cols(), src.type());
-        src.convertTo(dest, -1, 0.5, 0);
-        Imgcodecs.imwrite(finalFolder + filename, dest);
+        src.convertTo(dest, -1, alpha, 0);
+        Imgcodecs.imwrite(this.finalFolder + this.filename, dest);
     }
 
-    private static void reduceNoise(String filename, String initialFolder, String finalFolder, String extension, int whiteRatio) {
+    private void reduceNoise(int whiteRatio) {
         BufferedImage img;
-        File f = new File(initialFolder + filename);
+        File f = new File(this.initialFolder + this.filename);
 
         try {
             img = ImageIO.read(f);
@@ -66,9 +63,9 @@ public class PreprocessedImage {
             }
         }
 
-        f = new File(finalFolder + filename);
+        f = new File(this.finalFolder + this.filename);
         try {
-            ImageIO.write(img, extension, f);
+            ImageIO.write(img, this.extension, f);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

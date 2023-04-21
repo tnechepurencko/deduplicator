@@ -1,75 +1,76 @@
-import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
-
+import org.apache.commons.lang3.tuple.Pair;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.List;
 
+/**
+ * The principle of work:
+ * 1. The pictures from the 'pictures/' repo go through preprocessing: there is a debugging of shadows on the image,
+ * and the transformation of the picture into black and white. Preprocessed pictures are saved to the
+ * 'preprocessed_pictures/' repo.
+ * 2. The pictures from the 'preprocessed_pictures/' repo pass text recognition where the parameters 'GSTIN'
+ * and 'total amount' passes to the database as unique terms of a receipt (Ideally, the time and date should also
+ * be stored in the database, but the text recognizer has huge problems with them).
+ * 3. If 'GSTIN' and 'total amount' of the receipt is already stored in the database, then the current receipt
+ * is a duplicate.
+ */
 public class Main {
     public static void main(String[] args) {
+        Database database = null;
         try {
-            Database database = new Database();
+            database = new Database();
         } catch (SQLException e) {
             Database.printSQLException(e);
             System.exit(0);
         }
-        Tesseract tesseract = prepareTesseract();
 
         String initialFolder = "pictures/";
         String finalFolder = "preprocessed_pictures/";
         String extension = "jpg";
 
+        try {
+            Files.createDirectories(Paths.get(finalFolder));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
         File folder = new File(initialFolder);
         File[] listOfFiles = folder.listFiles();
+        if (listOfFiles != null) {
+            for (File file : listOfFiles) {
+                if (file.isFile()) {
+                    try {
+                        ProcessedImage image = new ProcessedImage(file.getName(), initialFolder, finalFolder, extension);
+                        Pair<String, String> pair = image.processImage();
+                        if (pair != null) {
+                            String gstin = pair.getLeft();
+                            String total = pair.getRight();
 
-        for (File file : listOfFiles) {
-            if (file.isFile()) {
-                try {
-                    String gstin = processImage(file, tesseract, initialFolder, finalFolder, extension);
-                    if (gstin != null) {
-                        gstin = formatGSTIN(gstin);
-                        System.out.println("Formatted GSTIN:\t" + gstin);
+                            System.out.println("GSTIN:\t" + gstin);
+                            System.out.println("TOTAL:\t" + total);
+
+                            if (database.notDuplicate(gstin, total)) {
+                                try {
+                                    database.insertReceipt(gstin, total, initialFolder + file.getName());
+                                } catch (SQLException e) {
+                                    Database.printSQLException(e);
+                                }
+                            } else {
+                                System.out.println("This receipt already exists in the database!");
+                            }
+                        }
+                    } catch (TesseractException e) {
+                        throw new RuntimeException(e);
+                    } catch (SQLException e) {
+                        Database.printSQLException(e);
+                        System.exit(0);
                     }
-
-                } catch (TesseractException e) {
-                    throw new RuntimeException(e);
                 }
             }
         }
-    }
-
-    public static Tesseract prepareTesseract() {
-        Tesseract tesseract = new Tesseract();
-        tesseract.setDatapath("tessdata_best-main");
-        tesseract.setLanguage("eng");
-        tesseract.setPageSegMode(1);
-        tesseract.setOcrEngineMode(1);
-        return tesseract;
-    }
-
-    public static String processImage(File file, Tesseract tesseract, String initialFolder, String finalFolder, String extension) throws TesseractException {
-        System.out.println(file.getName());
-        for (int i = 10000; i < 100000; i += 10000) {
-            file = PreprocessedImage.preprocessedImage(file.getName(), initialFolder, finalFolder, extension, i);
-            String result = tesseract.doOCR(file);
-            if (result.contains("GSTIN")) {
-                List<String> gstin = result.lines().filter(line -> line.contains("GSTIN")).toList();
-                return gstin.get(0);
-//            } else if (result.contains("GST")) {
-//                result.lines().filter(line -> line.contains("GST")).forEach(System.out::println);
-            }
-        }
-        System.out.printf("GSTIN not found in %s%n", file.getName());
-        return null;
-    }
-
-    public static String formatGSTIN(String gstin) {
-        return removeNonAlphanumeric(Arrays.stream(gstin.split("GSTIN")).toList().get(1));
-    }
-
-    public static String removeNonAlphanumeric(String str) {
-        return str.replaceAll("[^a-zA-Z0-9]", "");
     }
 }
 

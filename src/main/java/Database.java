@@ -1,43 +1,63 @@
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.Properties;
 
 public class Database {
     private final String url;
     private final String user;
     private final String password;
+    private final Properties props;
+    private static final String createTableSQL =
+            "CREATE TABLE IF NOT EXISTS receipts (" +
+            "id SERIAL PRIMARY KEY," +
+            " gstin VARCHAR(50) NOT NULL, " +
+            " total VARCHAR(50) NOT NULL," +
+            " path VARCHAR(50));";
 
     public Database() throws SQLException {
-        this.url = "jdbc:postgresql://localhost/deduplicator";
+        this.url = "jdbc:postgresql://localhost:5433/deduplicator";
         this.user = "postgres";
         this.password = "1308249756";
+        this.props = getProps();
         this.createTable();
     }
 
-    private static final String createTableSQL =
-            "CREATE TABLE IF NOT EXISTS receipts (" +
-            "id INT PRIMARY KEY," +
-            " gstin VARCHAR(50) UNIQUE NOT NULL, " +
-            " path VARCHAR(50) UNIQUE NOT NULL)";
-
     private void createTable() throws SQLException {
-        System.out.println(createTableSQL);
-        Properties props = new Properties();
-        props.setProperty("user", "postgres");
-        props.setProperty("password", "1308249756");
-        props.setProperty("encoding", "UTF8");
-
-        try (Connection conn = DriverManager.getConnection(url, props);
+        try (Connection conn = DriverManager.getConnection(this.url, this.props);
             Statement statement = conn.createStatement()) {
+            System.out.println(createTableSQL);
             statement.execute(createTableSQL);
         }
+    }
 
-//        try (Connection conn = DriverManager.getConnection(url, user, password);
-//            Statement statement = conn.createStatement()) {
-//            statement.execute(createTableSQL);
-//        }
+    public void insertReceipt(String gstin, String total, String path) throws SQLException {
+        try (Connection conn = DriverManager.getConnection(this.url, this.props);
+             Statement statement = conn.createStatement()) {
+            String insertReceiptSQL = String.format(
+                    "INSERT INTO receipts (gstin, total, path) VALUES ('%s', '%s', '%s');",
+                    gstin,
+                    total,
+                    path);
+            System.out.println(insertReceiptSQL);
+            statement.execute(insertReceiptSQL);
+        }
+    }
+
+    public boolean notDuplicate(String gstin, String total) throws SQLException {
+        String select = "SELECT count(*) FROM receipts WHERE gstin = ? AND total = ?";
+        int count;
+
+        try (Connection conn = DriverManager.getConnection(this.url, this.props);
+             PreparedStatement statement = conn.prepareStatement(select)) {
+            statement.setString(1, gstin);
+            statement.setString(2, total);
+
+            System.out.println(statement);
+            ResultSet rs = statement.executeQuery();
+            rs.next();
+            count = rs.getInt(1);
+        }
+
+        return count <= 0;
     }
 
     public static void printSQLException(SQLException ex) {
@@ -54,5 +74,13 @@ public class Database {
                 }
             }
         }
+    }
+
+    public Properties getProps() {
+        Properties props = new Properties();
+        props.setProperty("user", this.user);
+        props.setProperty("password", this.password);
+        props.setProperty("encoding", "UTF8");
+        return props;
     }
 }
